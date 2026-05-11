@@ -1,33 +1,48 @@
 import pandas as pd
+import streamlit as st
+import plotly.express as px
+import plotly.graph_objects as go
 
 # ============================================================
-#   TRAMA STRATEGY ANALYZER
+#   TRAMA STRATEGY ANALYZER — Versión Streamlit
 #   Análisis de competencia de agencias de diseño en Colombia
 # ============================================================
 
+st.set_page_config(
+    page_title="TRAMA Strategy Analyzer",
+    page_icon="🖤",
+    layout="wide"
+)
+
 # ─────────────────────────────────────────
 # 1. CARGAR LA BASE DE DATOS
+#    ✅ Ruta relativa al repositorio GitHub
+#    ❌ Ya NO usa Google Drive
 # ─────────────────────────────────────────
-file_name = 'datos/Competencia_Agencias_Colombia_2025-2026.xlsx'
 
-try:
-    df = pd.read_excel(file_name)
-    df = df.dropna(how='all').reset_index(drop=True)
-    df = df.dropna(subset=['ID']).reset_index(drop=True)
+@st.cache_data
+def cargar_datos():
+    file_name = 'datos/Competencia_Agencias_Colombia_2025-2026.xlsx'  # ← ruta GitHub
 
-    if 'Especialidad' not in df.columns:
-        print("Columnas encontradas:", df.columns.tolist())
-        raise KeyError("No se encontró la columna 'Especialidad'.")
+    try:
+        df = pd.read_excel(file_name)
+        df = df.dropna(how='all').reset_index(drop=True)
+        df = df.dropna(subset=['ID']).reset_index(drop=True)
 
-    print(f"✅ Éxito: Se cargaron {len(df)} agencias para el análisis.\n")
+        if 'Especialidad' not in df.columns:
+            st.error(f"Columnas encontradas: {df.columns.tolist()}")
+            st.stop()
 
-except Exception as e:
-    print(f"❌ Error al procesar el archivo: {e}")
-    exit()
+        return df
+
+    except Exception as e:
+        st.error(f"❌ Error al cargar el archivo: {e}")
+        st.stop()
 
 
 # ─────────────────────────────────────────
 # 2. LIMPIAR Y PREPARAR LOS DATOS
+#    (mismas funciones del código original)
 # ─────────────────────────────────────────
 
 def limpiar_precio(texto):
@@ -64,26 +79,11 @@ def detectar_ciudad(texto):
         return 'Remota'
     return 'Bogotá'
 
-# Aplicar limpieza columna por columna
-df['Precio_Cat']  = df['Precios (Est.)'].apply(limpiar_precio)
-df['Innovacion']  = df['Innovación'].apply(extraer_innovacion)
-df['Ciudad']      = df['Ubicación'].apply(detectar_ciudad)
-
-
-# ─────────────────────────────────────────
-# 3. ANÁLISIS 1 — ESPECIALIDADES (tu código original mejorado)
-# ─────────────────────────────────────────
-
-def analizar_especialidades(df):
-    print("=" * 50)
-    print("  ANÁLISIS 1: ESPECIALIDADES DEL MERCADO")
-    print("=" * 50)
-
+def contar_especialidades(df):
+    """Cuenta agencias por categoría de especialidad (ciclo FOR + IF del código original)."""
     conteo = {"Diseño": 0, "Marketing": 0, "Publicidad": 0, "Branding": 0, "Tecnología": 0}
-
     for i in range(len(df)):
         valor = str(df.loc[i, 'Especialidad']).lower()
-
         if "diseño" in valor:
             conteo["Diseño"] += 1
         elif "marketing" in valor:
@@ -94,329 +94,323 @@ def analizar_especialidades(df):
             conteo["Branding"] += 1
         elif "tecnología" in valor or "tecnologia" in valor or "tech" in valor:
             conteo["Tecnología"] += 1
+    return conteo
 
-    print("\n--- RESULTADOS DEL ANÁLISIS ---")
-    for categoria, total in conteo.items():
-        barra = "█" * total
-        print(f"  {categoria:<12}: {barra} ({total})")
+def responder_chatbot(pregunta, df):
+    """Lógica del chatbot estratégico (mismo código original, adaptado para Streamlit)."""
+    p = pregunta.lower()
 
-    print("\n--- TENDENCIA IDENTIFICADA ---")
-    ganador = max(conteo, key=conteo.get)
-    if conteo[ganador] > 0:
-        print(f"  La corriente más fuerte actualmente es: {ganador}.")
-        print("  Consejo: Para destacar, busca un sub-nicho que no esté saturado.\n")
-    else:
-        print("  No se encontraron categorías claras.\n")
+    if any(x in p for x in ['más innovador', 'mas innovador', 'mayor innovación', 'innova más']):
+        top = df.nlargest(3, 'Innovacion')[['Nombre de la Agencia', 'Ciudad', 'Innovacion', 'Especialidad']]
+        resp = "**🏆 Las 3 agencias más innovadoras:**\n\n"
+        for _, fila in top.iterrows():
+            resp += f"- **{fila['Nombre de la Agencia']}** ({fila['Ciudad']}) — Nivel {fila['Innovacion']}/5 — {fila['Especialidad']}\n"
+        return resp
 
+    elif any(x in p for x in ['nicho', 'espacio', 'oportunidad', 'saturado']):
+        return (
+            "**🎯 Nichos con menor competencia:**\n\n"
+            "- Emprendedores con ambición de marca (precio moderado-alto)\n"
+            "- Marcas emergentes que buscan creatividad + estrategia\n"
+            "- Sector moda/estilo de vida en Bogotá (solo 1 agencia directa)\n\n"
+            "💡 **TRAMA** podría ser la agencia de branding estratégico para marcas que crecen — "
+            "ni tan cara como las premium, ni tan genérica como las moderadas."
+        )
 
-# ─────────────────────────────────────────
-# 4. ANÁLISIS 2 — PRECIOS DEL MERCADO
-# ─────────────────────────────────────────
-
-def analizar_precios(df):
-    print("=" * 50)
-    print("  ANÁLISIS 2: RANGOS DE PRECIO EN EL MERCADO")
-    print("=" * 50)
-
-    conteo_precios = {}
-
-    for i in range(len(df)):
-        precio = df.loc[i, 'Precio_Cat']
-        if precio in conteo_precios:
-            conteo_precios[precio] += 1
-        else:
-            conteo_precios[precio] = 1
-
-    print("\n--- DISTRIBUCIÓN DE PRECIOS ---")
-    orden = ['Inexpensivo', 'Moderado', 'Moderado-Alto', 'Alto', 'Premium']
-    for nivel in orden:
-        total = conteo_precios.get(nivel, 0)
-        barra = "█" * total
-        print(f"  {nivel:<14}: {barra} ({total})")
-
-    # Conclusión
-    precio_dominante = max(conteo_precios, key=conteo_precios.get)
-    print(f"\n  💡 El precio dominante en el mercado es: {precio_dominante}.")
-    print(f"  El segmento 'Moderado-Alto' tiene {conteo_precios.get('Moderado-Alto', 0)} agencias — es el hueco con más potencial.\n")
-
-
-# ─────────────────────────────────────────
-# 5. ANÁLISIS 3 — INNOVACIÓN POR CIUDAD
-# ─────────────────────────────────────────
-
-def analizar_innovacion(df):
-    print("=" * 50)
-    print("  ANÁLISIS 3: INNOVACIÓN POR CIUDAD")
-    print("=" * 50)
-
-    ciudades = ['Bogotá', 'Medellín', 'Cali', 'Remota']
-    resultados = {}
-
-    for ciudad in ciudades:
-        agencias_ciudad = []
+    elif any(x in p for x in ['debilidad', 'punto débil', 'flaqueza', 'falla']):
+        debilidades_comunes = []
         for i in range(len(df)):
-            if df.loc[i, 'Ciudad'] == ciudad:
-                agencias_ciudad.append(df.loc[i, 'Innovacion'])
+            d = str(df.loc[i, 'Debilidad a Mejorar']).lower()
+            if 'personaliz' in d or 'escala' in d:
+                debilidades_comunes.append('Falta de personalización')
+            elif 'creativ' in d:
+                debilidades_comunes.append('Creatividad limitada')
+            elif 'ia' in d or 'inteligencia' in d:
+                debilidades_comunes.append('Sin uso de IA')
 
-        if len(agencias_ciudad) > 0:
-            promedio = sum(agencias_ciudad) / len(agencias_ciudad)
-            resultados[ciudad] = round(promedio, 1)
+        conteo_d = {}
+        for d in debilidades_comunes:
+            conteo_d[d] = conteo_d.get(d, 0) + 1
 
-    print("\n--- PROMEDIO DE INNOVACIÓN (escala 1-5) ---")
-    for ciudad, promedio in resultados.items():
-        estrellas = "★" * int(promedio) + "☆" * (5 - int(promedio))
-        print(f"  {ciudad:<10}: {estrellas}  ({promedio}/5)")
+        resp = "**⚠️ Debilidades más repetidas en la competencia:**\n\n"
+        for d, c in sorted(conteo_d.items(), key=lambda x: -x[1]):
+            resp += f"- {d}: {c} agencias\n"
+        resp += "\n💡 Esas son tus oportunidades de diferenciación."
+        return resp
 
-    ciudad_top = max(resultados, key=resultados.get)
-    print(f"\n  🏆 Ciudad más innovadora: {ciudad_top} con {resultados[ciudad_top]}/5\n")
+    elif any(x in p for x in ['bogotá', 'bogota', 'medellín', 'medellin', 'cali']):
+        if 'bogot' in p:
+            ciudad_buscada = 'Bogotá'
+        elif 'medell' in p:
+            ciudad_buscada = 'Medellín'
+        else:
+            ciudad_buscada = 'Cali'
+
+        agencias = []
+        for i in range(len(df)):
+            if df.loc[i, 'Ciudad'] == ciudad_buscada:
+                agencias.append(df.loc[i, 'Nombre de la Agencia'])
+
+        resp = f"**🏙️ {len(agencias)} agencias en {ciudad_buscada}:**\n\n"
+        for a in agencias:
+            resp += f"- {a}\n"
+        return resp
+
+    elif any(x in p for x in ['trama', 'recomendación', 'recomendacion', 'consejo', 'posicion', 'donde']):
+        return (
+            "**🎯 Recomendación estratégica para TRAMA:**\n\n"
+            "**Posicionamiento sugerido:**\n"
+            "- 💰 Precio → Moderado-Alto\n"
+            "- 💡 Innovación → Nivel 4–5 (usar IA + storytelling)\n"
+            "- 🎯 Nicho → Marcas emergentes con propósito\n"
+            "- 🏙️ Ciudad → Bogotá\n\n"
+            "**Diferencial clave:**\n"
+            "La mayoría de agencias son o muy técnicas (sin alma) o muy artísticas (sin estrategia). "
+            "TRAMA puede ser el punto medio: branding con estrategia real + estética auténtica.\n\n"
+            "**Debilidades a explotar:**\n"
+            "- Las Premium son inaccesibles para marcas medianas\n"
+            "- Las Moderadas son genéricas y sin diferenciación\n"
+            "- Pocas usan IA de forma creativa — ahí está el gap 🚀"
+        )
+
+    elif any(x in p for x in ['ayuda', 'help', 'qué puedes', 'que puedes', 'opciones']):
+        return (
+            "**💬 Puedes preguntarme:**\n\n"
+            "- ¿Quién es el más innovador?\n"
+            "- ¿Qué nichos están disponibles?\n"
+            "- ¿Cuáles son las debilidades de la competencia?\n"
+            "- ¿Cuántas agencias hay en Bogotá / Medellín / Cali?\n"
+            "- ¿Dónde debería posicionarse TRAMA?\n"
+        )
+
+    else:
+        # Búsqueda por nombre de agencia
+        for i in range(len(df)):
+            nombre_ag = str(df.loc[i, 'Nombre de la Agencia']).lower()
+            if any(palabra in nombre_ag for palabra in p.split() if len(palabra) > 3):
+                fila = df.loc[i]
+                return (
+                    f"**📋 {fila['Nombre de la Agencia']}** — {fila['Ciudad']}\n\n"
+                    f"- **Especialidad:** {fila['Especialidad']}\n"
+                    f"- **Precio:** {fila['Precio_Cat']}\n"
+                    f"- **Innovación:** {fila['Innovacion']}/5\n"
+                    f"- **Nicho:** {fila['Nicho de Mercado']}\n"
+                    f"- **Debilidad:** {fila['Debilidad a Mejorar']}\n"
+                )
+
+        return "No entendí bien la pregunta. Escribe **ayuda** para ver qué puedo responderte."
 
 
 # ─────────────────────────────────────────
-# 6. ANÁLISIS 4 — MAPA DE POSICIONAMIENTO
+# 3. CARGAR Y PREPARAR DATOS
 # ─────────────────────────────────────────
 
-def mapa_posicionamiento(df):
-    print("=" * 50)
-    print("  ANÁLISIS 4: MAPA DE POSICIONAMIENTO COMPETITIVO")
-    print("=" * 50)
+df = cargar_datos()
+df['Precio_Cat']  = df['Precios (Est.)'].apply(limpiar_precio)
+df['Innovacion']  = df['Innovación'].apply(extraer_innovacion)
+df['Ciudad']      = df['Ubicación'].apply(detectar_ciudad)
 
-    orden_precio = {'Inexpensivo': 1, 'Moderado': 2, 'Moderado-Alto': 3, 'Alto': 4, 'Premium': 5}
-    etiquetas_precio = {1: 'Inexpensivo', 2: 'Moderado', 3: 'Mod-Alto', 4: 'Alto', 5: 'Premium'}
+# Orden para gráficas
+orden_precio = ['Inexpensivo', 'Moderado', 'Moderado-Alto', 'Alto', 'Premium']
+colores_ciudad = {
+    'Bogotá': '#3266ad',
+    'Medellín': '#5DCAA5',
+    'Cali': '#EF9F27',
+    'Remota': '#E24B4A'
+}
 
-    # Mapa de 5x5: precio (columnas) vs innovación (filas)
-    mapa = {}
+# ─────────────────────────────────────────
+# 4. INTERFAZ — ENCABEZADO
+# ─────────────────────────────────────────
+
+st.markdown("## 🖤 TRAMA Strategy Analyzer")
+st.markdown("**Análisis de competencia de agencias de diseño en Colombia 2025–2026**")
+st.divider()
+
+# Métricas rápidas
+col1, col2, col3, col4 = st.columns(4)
+col1.metric("Total agencias", len(df))
+col2.metric("Ciudades", df['Ciudad'].nunique())
+col3.metric("Más innovadoras", len(df[df['Innovacion'] == 5]))
+col4.metric("Precio dominante", df['Precio_Cat'].value_counts().idxmax())
+
+st.divider()
+
+# ─────────────────────────────────────────
+# 5. PESTAÑAS PRINCIPALES
+# ─────────────────────────────────────────
+
+tab1, tab2, tab3, tab4 = st.tabs([
+    "📊 Especialidades",
+    "💰 Precios e Innovación",
+    "🎯 Mapa de posicionamiento",
+    "💬 Chatbot estratégico"
+])
+
+
+# ── TAB 1: ESPECIALIDADES ─────────────────
+with tab1:
+    st.subheader("Análisis de especialidades del mercado")
+    st.caption("Ciclo FOR + IF/ELIF del código original aplicado a los datos reales")
+
+    conteo = contar_especialidades(df)
+    ganador = max(conteo, key=conteo.get)
+
+    fig = px.bar(
+        x=list(conteo.keys()),
+        y=list(conteo.values()),
+        labels={'x': 'Especialidad', 'y': 'Número de agencias'},
+        color=list(conteo.values()),
+        color_continuous_scale='teal',
+        text=list(conteo.values())
+    )
+    fig.update_traces(textposition='outside')
+    fig.update_layout(showlegend=False, coloraxis_showscale=False, height=400)
+    st.plotly_chart(fig, use_container_width=True)
+
+    st.info(f"**Tendencia dominante:** {ganador} con {conteo[ganador]} agencias. "
+            f"Para destacar, busca un sub-nicho que no esté saturado.")
+
+
+# ── TAB 2: PRECIOS E INNOVACIÓN ───────────
+with tab2:
+    st.subheader("Distribución de precios e innovación")
+
+    col_a, col_b = st.columns(2)
+
+    with col_a:
+        st.markdown("**Agencias por rango de precio**")
+        conteo_precios = {}
+        for i in range(len(df)):
+            precio = df.loc[i, 'Precio_Cat']
+            conteo_precios[precio] = conteo_precios.get(precio, 0) + 1
+
+        datos_precio = [(nivel, conteo_precios.get(nivel, 0)) for nivel in orden_precio]
+        fig2 = px.bar(
+            x=[d[0] for d in datos_precio],
+            y=[d[1] for d in datos_precio],
+            color=[d[1] for d in datos_precio],
+            color_continuous_scale='teal',
+            text=[d[1] for d in datos_precio],
+            labels={'x': 'Precio', 'y': 'Agencias'}
+        )
+        fig2.update_traces(textposition='outside')
+        fig2.update_layout(showlegend=False, coloraxis_showscale=False, height=350)
+        st.plotly_chart(fig2, use_container_width=True)
+
+    with col_b:
+        st.markdown("**Innovación promedio por ciudad**")
+        ciudades = ['Bogotá', 'Medellín', 'Cali', 'Remota']
+        promedios = []
+        for ciudad in ciudades:
+            valores = []
+            for i in range(len(df)):
+                if df.loc[i, 'Ciudad'] == ciudad:
+                    valores.append(df.loc[i, 'Innovacion'])
+            if valores:
+                promedios.append(round(sum(valores) / len(valores), 1))
+            else:
+                promedios.append(0)
+
+        fig3 = px.bar(
+            x=ciudades,
+            y=promedios,
+            color=ciudades,
+            color_discrete_map=colores_ciudad,
+            text=promedios,
+            labels={'x': 'Ciudad', 'y': 'Innovación promedio (1-5)'}
+        )
+        fig3.update_traces(textposition='outside')
+        fig3.update_layout(showlegend=False, height=350, yaxis_range=[0, 5.5])
+        st.plotly_chart(fig3, use_container_width=True)
+
+    st.info(f"💡 El segmento **Moderado-Alto** tiene {conteo_precios.get('Moderado-Alto', 0)} agencias "
+            f"— es el hueco con más potencial para TRAMA.")
+
+
+# ── TAB 3: MAPA DE POSICIONAMIENTO ───────
+with tab3:
+    st.subheader("Mapa de posicionamiento competitivo")
+    st.caption("Precio vs. Innovación — la zona verde es la oportunidad de TRAMA")
+
+    orden_num = {'Inexpensivo': 1, 'Moderado': 2, 'Moderado-Alto': 3, 'Alto': 4, 'Premium': 5}
+
+    scatter_data = []
     for i in range(len(df)):
-        precio_num = orden_precio.get(df.loc[i, 'Precio_Cat'], 0)
-        innov      = df.loc[i, 'Innovacion']
-        if precio_num > 0 and innov > 0:
-            clave = (innov, precio_num)
-            mapa[clave] = mapa.get(clave, 0) + 1
+        scatter_data.append({
+            'Agencia': df.loc[i, 'Nombre de la Agencia'],
+            'Ciudad': df.loc[i, 'Ciudad'],
+            'Precio_Num': orden_num.get(df.loc[i, 'Precio_Cat'], 0),
+            'Precio': df.loc[i, 'Precio_Cat'],
+            'Innovacion': df.loc[i, 'Innovacion'],
+            'Nicho': df.loc[i, 'Nicho de Mercado'],
+        })
 
-    print("\n  Cada número = cuántas agencias ocupan ese cuadrante")
-    print("  (★) = Zona estratégica recomendada para TRAMA\n")
-    print(f"  {'':>12}", end="")
-    for p in range(1, 6):
-        print(f"  {etiquetas_precio[p]:<10}", end="")
-    print()
-    print("  " + "-" * 70)
+    df_scatter = pd.DataFrame(scatter_data)
 
-    for innov in range(5, 0, -1):
-        print(f"  Innov {innov}/5  |", end="")
-        for precio in range(1, 6):
-            cantidad = mapa.get((innov, precio), 0)
-            # Marcar zona TRAMA
-            if innov >= 4 and precio == 3:
-                celda = f"  [★{cantidad}]      "
-            else:
-                celda = f"  {cantidad}          " if cantidad == 0 else f"  {cantidad}          "
-            print(celda[:13], end="")
-        print()
+    fig4 = px.scatter(
+        df_scatter,
+        x='Precio_Num',
+        y='Innovacion',
+        color='Ciudad',
+        color_discrete_map=colores_ciudad,
+        hover_name='Agencia',
+        hover_data={'Precio': True, 'Nicho': True, 'Precio_Num': False},
+        labels={'Precio_Num': 'Rango de Precio', 'Innovacion': 'Nivel de Innovación (1-5)'},
+        height=500
+    )
 
-    print("\n  💡 La zona [★] (Moderado-Alto + Innovación 4-5) es donde")
-    print("     TRAMA tiene la mayor oportunidad con menos competidores.\n")
+    # Zona TRAMA
+    fig4.add_shape(
+        type="rect",
+        x0=2.6, x1=3.4, y0=3.7, y1=5.3,
+        fillcolor="rgba(34, 197, 94, 0.12)",
+        line=dict(color="#22c55e", width=2, dash="dash")
+    )
+    fig4.add_annotation(
+        x=3, y=5.4,
+        text="⭐ Zona TRAMA",
+        showarrow=False,
+        font=dict(color="#22c55e", size=13)
+    )
+    fig4.update_layout(
+        xaxis=dict(
+            tickmode='array',
+            tickvals=[1, 2, 3, 4, 5],
+            ticktext=['Inexpensivo', 'Moderado', 'Mod-Alto', 'Alto', 'Premium']
+        )
+    )
+    st.plotly_chart(fig4, use_container_width=True)
+    st.success("**Zona estratégica para TRAMA:** Moderado-Alto + Innovación 4–5. "
+               "Solo 5 agencias compiten aquí y ninguna combina creatividad emocional + estrategia digital.")
 
 
-# ─────────────────────────────────────────
-# 7. CHATBOT ESTRATÉGICO
-# ─────────────────────────────────────────
+# ── TAB 4: CHATBOT ────────────────────────
+with tab4:
+    st.subheader("Chatbot estratégico de TRAMA")
+    st.caption("Pregúntame sobre la competencia, nichos, o dónde posicionarte")
 
-def chatbot(df):
-    print("=" * 50)
-    print("  CHATBOT ESTRATÉGICO DE TRAMA")
-    print("=" * 50)
-    print("  Pregúntame sobre la competencia.")
-    print("  Escribe 'salir' para terminar.\n")
+    # Inicializar historial
+    if "mensajes" not in st.session_state:
+        st.session_state.mensajes = [
+            {"rol": "bot", "texto": "¡Hola! Soy el analizador estratégico de TRAMA 🖤 "
+             "Tengo cargados los datos de las 49 agencias. Escribe **ayuda** para ver qué puedo responderte."}
+        ]
 
-    while True:
-        pregunta = input("  Tú → ").strip().lower()
-
-        if pregunta == 'salir':
-            print("  Bot → ¡Hasta pronto! Mucho éxito con TRAMA. 🖤\n")
-            break
-
-        elif pregunta == '':
-            continue
-
-        # ── ¿Quién es el más innovador? ──────────────────
-        elif any(p in pregunta for p in ['más innovador', 'mas innovador', 'mayor innovación', 'innova más']):
-            top = df.nlargest(3, 'Innovacion')[['Nombre de la Agencia', 'Ciudad', 'Innovacion', 'Especialidad']]
-            print("\n  Bot → Las 3 agencias más innovadoras son:")
-            for _, fila in top.iterrows():
-                print(f"        • {fila['Nombre de la Agencia']} ({fila['Ciudad']}) — Nivel {fila['Innovacion']}/5 — {fila['Especialidad']}")
-            print()
-
-        # ── Nichos disponibles ───────────────────────────
-        elif any(p in pregunta for p in ['nicho', 'espacio', 'oportunidad', 'saturado']):
-            print("\n  Bot → Según los datos, los nichos con menor competencia son:")
-            print("        • Emprendedores con ambición de marca (precio moderado-alto)")
-            print("        • Marcas emergentes que buscan creatividad + estrategia")
-            print("        • Sector moda/estilo de vida en Bogotá (solo 1 agencia directa)")
-            print("        💡 TRAMA podría ser la agencia de branding estratégico para")
-            print("           marcas que crecen — ni tan cara como las premium,")
-            print("           ni tan genérica como las moderadas.\n")
-
-        # ── Debilidades de la competencia ────────────────
-        elif any(p in pregunta for p in ['debilidad', 'punto débil', 'flaqueza', 'falla']):
-            debilidades_comunes = []
-            for i in range(len(df)):
-                d = str(df.loc[i, 'Debilidad a Mejorar']).lower()
-                if 'personaliz' in d or 'escala' in d:
-                    debilidades_comunes.append('falta de personalización')
-                elif 'creativ' in d:
-                    debilidades_comunes.append('creatividad limitada')
-                elif 'ia' in d or 'inteligencia' in d:
-                    debilidades_comunes.append('sin uso de IA')
-
-            conteo_d = {}
-            for d in debilidades_comunes:
-                conteo_d[d] = conteo_d.get(d, 0) + 1
-
-            print("\n  Bot → Debilidades más repetidas en la competencia:")
-            for d, c in sorted(conteo_d.items(), key=lambda x: -x[1]):
-                print(f"        • {d.capitalize()}: {c} agencias")
-            print("        💡 Esas son tus oportunidades de diferenciación.\n")
-
-        # ── Buscar agencia por nombre ─────────────────────
-        elif any(p in pregunta for p in ['buscar', 'información de', 'dime sobre', 'quién es']):
-            print("\n  Bot → ¿Cuál es el nombre de la agencia que buscas?")
-            nombre = input("  Tú (nombre) → ").strip().lower()
-            encontrada = False
-            for i in range(len(df)):
-                if nombre in str(df.loc[i, 'Nombre de la Agencia']).lower():
-                    fila = df.loc[i]
-                    print(f"\n        📋 {fila['Nombre de la Agencia']} — {fila['Ciudad']}")
-                    print(f"        Especialidad : {fila['Especialidad']}")
-                    print(f"        Precio       : {fila['Precio_Cat']}")
-                    print(f"        Innovación   : {fila['Innovacion']}/5")
-                    print(f"        Nicho        : {fila['Nicho de Mercado']}")
-                    print(f"        Debilidad    : {fila['Debilidad a Mejorar']}\n")
-                    encontrada = True
-                    break
-            if not encontrada:
-                print(f"  Bot → No encontré '{nombre}' en la base de datos. Verifica el nombre.\n")
-
-        # ── Agencias por ciudad ───────────────────────────
-        elif any(p in pregunta for p in ['bogotá', 'bogota', 'medellín', 'medellin', 'cali', 'ciudad']):
-            if 'bogot' in pregunta:
-                ciudad_buscada = 'Bogotá'
-            elif 'medell' in pregunta:
-                ciudad_buscada = 'Medellín'
-            elif 'cali' in pregunta:
-                ciudad_buscada = 'Cali'
-            else:
-                ciudad_buscada = None
-
-            if ciudad_buscada:
-                agencias = []
-                for i in range(len(df)):
-                    if df.loc[i, 'Ciudad'] == ciudad_buscada:
-                        agencias.append(df.loc[i, 'Nombre de la Agencia'])
-                print(f"\n  Bot → Hay {len(agencias)} agencias en {ciudad_buscada}:")
-                for a in agencias:
-                    print(f"        • {a}")
-                print()
-
-        # ── Recomendación para TRAMA ──────────────────────
-        elif any(p in pregunta for p in ['trama', 'recomendación', 'recomendacion', 'consejo', 'posicion']):
-            print("\n  Bot → 🎯 Recomendación estratégica para TRAMA:")
-            print()
-            print("        POSICIONAMIENTO SUGERIDO:")
-            print("        • Precio    → Moderado-Alto")
-            print("        • Innovación → Nivel 4–5 (usar IA + storytelling)")
-            print("        • Nicho     → Marcas emergentes con propósito")
-            print("        • Ciudad    → Bogotá (mayor mercado, más competencia")
-            print("                      pero también más oportunidad)")
-            print()
-            print("        DIFERENCIAL CLAVE:")
-            print("        • La mayoría de agencias son o muy técnicas (sin alma)")
-            print("          o muy artísticas (sin estrategia).")
-            print("        • TRAMA puede ser el punto medio: branding con")
-            print("          estrategia real + estética auténtica.")
-            print()
-            print("        DEBILIDADES A EXPLOTAR de la competencia:")
-            print("        • Las Premium son inaccesibles para marcas medianas.")
-            print("        • Las Moderadas son genéricas y sin diferenciación.")
-            print("        • Pocas usan IA de forma creativa — ahí está el gap.\n")
-
-        # ── Listar todas las agencias ─────────────────────
-        elif any(p in pregunta for p in ['listar', 'lista', 'todas', 'mostrar todas']):
-            print(f"\n  Bot → Las {len(df)} agencias en la base de datos:\n")
-            for i in range(len(df)):
-                nombre   = df.loc[i, 'Nombre de la Agencia']
-                ciudad   = df.loc[i, 'Ciudad']
-                precio   = df.loc[i, 'Precio_Cat']
-                innov    = df.loc[i, 'Innovacion']
-                print(f"        {int(df.loc[i,'ID']):>2}. {nombre:<25} {ciudad:<10} {precio:<14} Innov:{innov}/5")
-            print()
-
-        # ── Ayuda ─────────────────────────────────────────
-        elif any(p in pregunta for p in ['ayuda', 'help', 'qué puedes', 'que puedes', 'opciones']):
-            print("\n  Bot → Puedes preguntarme:")
-            print("        • '¿Quién es el más innovador?'")
-            print("        • '¿Qué nichos están disponibles?'")
-            print("        • '¿Cuáles son las debilidades de la competencia?'")
-            print("        • 'Buscar' (para ver info de una agencia específica)")
-            print("        • '¿Cuántas agencias hay en Bogotá?'")
-            print("        • '¿Dónde debería posicionarse TRAMA?'")
-            print("        • 'Listar todas' (para ver todas las agencias)")
-            print("        • 'salir' para terminar\n")
-
+    # Mostrar historial
+    for msg in st.session_state.mensajes:
+        if msg["rol"] == "bot":
+            with st.chat_message("assistant"):
+                st.markdown(msg["texto"])
         else:
-            print("  Bot → No entendí bien la pregunta. Escribe 'ayuda' para ver")
-            print("        qué puedo responderte.\n")
+            with st.chat_message("user"):
+                st.markdown(msg["texto"])
 
+    # Input del usuario
+    pregunta = st.chat_input("Escribe tu pregunta aquí...")
 
-# ─────────────────────────────────────────
-# 8. MENÚ PRINCIPAL
-# ─────────────────────────────────────────
-
-def menu():
-    print("\n" + "═" * 50)
-    print("   🖤  TRAMA STRATEGY ANALYZER  🖤")
-    print("   Análisis de Competencia — Colombia 2025–2026")
-    print("═" * 50)
-
-    while True:
-        print("\n  ¿Qué quieres hacer?")
-        print("  [1] Análisis de especialidades")
-        print("  [2] Análisis de precios")
-        print("  [3] Innovación por ciudad")
-        print("  [4] Mapa de posicionamiento")
-        print("  [5] Chatbot estratégico")
-        print("  [6] Ejecutar todo el análisis")
-        print("  [0] Salir")
-
-        opcion = input("\n  Tu opción → ").strip()
-
-        if opcion == '1':
-            print()
-            analizar_especialidades(df)
-        elif opcion == '2':
-            print()
-            analizar_precios(df)
-        elif opcion == '3':
-            print()
-            analizar_innovacion(df)
-        elif opcion == '4':
-            print()
-            mapa_posicionamiento(df)
-        elif opcion == '5':
-            print()
-            chatbot(df)
-        elif opcion == '6':
-            print()
-            analizar_especialidades(df)
-            analizar_precios(df)
-            analizar_innovacion(df)
-            mapa_posicionamiento(df)
-        elif opcion == '0':
-            print("\n  ¡Hasta pronto! Mucho éxito con TRAMA. 🖤\n")
-            break
-        else:
-            print("  Opción no válida. Intenta de nuevo.")
-
-
-# ─────────────────────────────────────────
-# EJECUTAR EL PROGRAMA
-# ─────────────────────────────────────────
-menu()
+    if pregunta:
+        st.session_state.mensajes.append({"rol": "user", "texto": pregunta})
+        respuesta = responder_chatbot(pregunta, df)
+        st.session_state.mensajes.append({"rol": "bot", "texto": respuesta})
+        st.rerun()
